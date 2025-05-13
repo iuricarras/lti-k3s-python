@@ -13,52 +13,46 @@ load_dotenv()
 key = os.getenv('SECRETKEY')
 cipher_suite = Fernet(key.encode('utf-8'))
 
-def check_password(userPassword, password):
+def check_password(userToken, token):
     # Decrypt the password
-    passwordBits = password.encode('utf-8')
-    decrypted_password = cipher_suite.decrypt(userPassword)
+    tokenBits = token.encode('utf-8')
+    decrypted_token = cipher_suite.decrypt(userToken)
     # Compare the decrypted password with the provided password
-    print("decrypted_password: ", decrypted_password)
-    print("passwordBits: ", passwordBits)
-    return decrypted_password == passwordBits
+    print("decrypted_password: ", decrypted_token)
+    print("passwordBits: ", tokenBits)
+    return decrypted_token == tokenBits
     
 
 @api_bp.post('/login')
 def login():
     body = request.get_json()
     ip = body['ip']
-    username = body['username']
-    password = body['password']
+    token = body['token']
 
     user = User.query.filter_by(ip=ip).first()
 
-    if user and not check_password(user.password, password): # if a user is found, we want to redirect back to signup page so user can try again
-        return jsonify({'message': 'Invalid credentials'}), 401
-    elif user and check_password(user.password, password):
-        current_app.config['ROUTER_IP'] = ip
-        current_app.config['AUTHENTICATION'] = (username, password)
-        print(f"routerip set to: {current_app.config['ROUTER_IP']}")
-        return jsonify({'message': 'Login successful'}), 200
-    
     try:    
-        auth = (username, password)
-        api_url = "http://"+ ip +"/rest"
-        response = requests.get(api_url, auth=auth)
+        headers =  {"Authorization": "Bearer "+ token}
+        api_url = "https://"+ ip + ":6443" +"/api"
+        print(api_url)
+        response = requests.get(api_url, headers=headers, verify=False)
         if response.status_code == 401:
-            return jsonify({"status": "error", "message": "Invalid credentials"}), 401
+            return jsonify({"status": "error", "message": "Invalid token"}), 401
     except:
         return jsonify({"status": "error", "message": "No route to host"}), 500
-    # create a new user with the form data. Hash the password so the plaintext version isn't saved.
-    new_user = User(ip=ip, username=username, password=cipher_suite.encrypt(password.encode('utf-8')))
 
-    # add the new user to the database
-    db.session.add(new_user)
-    db.session.commit()
+    if not user:
+        new_user = User(ip=ip, token=cipher_suite.encrypt(token.encode('utf-8')))
+        db.session.add(new_user)
+        db.session.commit()
+    if user and not check_password(user.token, token):
+        user.token = token
+        db.session.commit()
+    
+    current_app.config['KUBERNETES_IP'] = ip
+    current_app.config['TOKEN'] = token
 
-    current_app.config['ROUTER_IP'] = ip
-    current_app.config['AUTHENTICATION'] = (username, password)
-
-    return jsonify({'message': 'User created successfully'}), 201
+    return jsonify({'message': 'Valid Token'}), 200
 
 
 @api_bp.get('/users')
@@ -66,7 +60,7 @@ def getUsers():
     users = User.query.all()
     output = []
     for user in users:
-        user_data = {'ip': user.ip, 'username': user.username}
+        user_data = {'ip': user.ip}
         output.append(user_data)
     return jsonify({'users': output})
 
@@ -77,13 +71,25 @@ def autoLogin():
 
     user = User.query.filter_by(ip=ip).first()
 
-    current_app.config['ROUTER_IP'] = ip
-    current_app.config['AUTHENTICATION'] = (user.username, cipher_suite.decrypt(user.password).decode('utf-8'))
+    token = cipher_suite.decrypt(user.token).decode('utf-8')
+
+    try:    
+        headers =  {"Authorization": "Bearer "+ token}
+        api_url = "https://"+ ip + ":6443" +"/api"
+        response = requests.get(api_url, headers=headers, verify=False)
+        if response.status_code == 401:
+            return jsonify({"status": "error", "message": "Invalid token"}), 401
+    except:
+        return jsonify({"status": "error", "message": "No route to host"}), 500
+
+
+    current_app.config['KUBERNETES_IP'] = ip
+    current_app.config['TOKEN'] = token
 
     return jsonify({'message': 'Login successful'}), 200
 
 @api_bp.get('/logout')
 def logout():
-    current_app.config['ROUTER_IP'] = None
-    current_app.config['AUTHENTICATION'] = None
+    current_app.config['KUBERNETES_IP'] = None
+    current_app.config['TOKEN'] = None
     return jsonify({'message': 'Logout successful'}), 200
