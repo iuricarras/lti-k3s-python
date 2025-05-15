@@ -15,6 +15,7 @@ cipher_suite = Fernet(key.encode('utf-8'))
 
 def check_password(userToken, token):
     # Decrypt the password
+    print(userToken)
     tokenBits = token.encode('utf-8')
     decrypted_token = cipher_suite.decrypt(userToken)
     # Compare the decrypted password with the provided password
@@ -46,7 +47,7 @@ def login():
         db.session.add(new_user)
         db.session.commit()
     if user and not check_password(user.token, token):
-        user.token = token
+        user.token = cipher_suite.encrypt(token.encode('utf-8'))
         db.session.commit()
     
     current_app.config['KUBERNETES_IP'] = ip
