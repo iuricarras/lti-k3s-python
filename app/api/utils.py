@@ -17,5 +17,5 @@ def apiRequest(url, method, body=None):
     elif method == 'PATCH':
         response = requests.patch(api_url, data=json.dumps(body), headers=headers, verify=False)
     elif method == 'DELETE':
-        response = requests.delete(api_url) 
+        response = requests.delete(api_url, headers=headers, verify=False) 
     return response.json(), response.status_code

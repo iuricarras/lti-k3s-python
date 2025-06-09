@@ -14,6 +14,13 @@ def get_nodes():
     response, status_code = apiRequest("/api/v1/nodes", "GET")
     return jsonify(response), status_code
 
+# Get node by name
+@api_bp.get('/v1/nodes/<node_name>')
+def get_node(node_name):    
+    response, status_code = apiRequest(f"/api/v1/nodes/{node_name}", "GET")
+    return jsonify(response), status_code
+
+
 # Get metrics for all nodes
 @api_bp.get('/v1/nodes/metrics')
 def get_node_metrics():
